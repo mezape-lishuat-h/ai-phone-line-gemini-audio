@@ -172,6 +172,7 @@ async function callHandler(call) {
   }
 }
 router.get('/yemot',callHandler);
+app.use(router);
 app.get('/api/conversations',(req,res)=>res.json({conversations:conversationLog,activeCalls:Array.from(activeCalls.values()),totalMessages:conversationLog.length,totalCallers:new Set(conversationLog.map(x=>x.phone)).size,serverTime:new Date().toISOString()}));
 app.get('/health',(req,res)=>res.json({ok:true}));
 app.get('/',(req,res)=>res.type('html').send('<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>AI Phone Line</title></head><body><h1>AI Phone Line Dashboard</h1><p>המערכת מחוברת וממתינה לשיחות</p></body></html>'));
