@@ -100,6 +100,20 @@ async function generateWithRetry(contents,useWebSearch=false) {
 }
 
 const yemotApi=new YemotApi(process.env.YEMOT_API_USERNAME,process.env.YEMOT_API_PASSWORD);
+
+async function downloadYemotRecording(recordPath) {
+  const cleanPath = String(recordPath || '').startsWith('ivr2:') ? String(recordPath) : 'ivr2:' + String(recordPath || '');
+  const token = (process.env.YEMOT_API_KEY || '').trim();
+  if (token) {
+    const url = `https://www.call2all.co.il/ym/api/DownloadFile?token=${encodeURIComponent(token)}&path=${encodeURIComponent(cleanPath)}`;
+    const res = await withTimeout(fetch(url), REQUEST_TIMEOUT_MS, 'download recording via token');
+    if (!res.ok) throw new Error(`DownloadFile HTTP ${res.status}: ${await res.text()}`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+  if (!yemotApi) throw new Error('Yemot API credentials are missing');
+  const res = await withTimeout(yemotApi.download_file(cleanPath), REQUEST_TIMEOUT_MS, 'download recording via yemotApi');
+  return Buffer.isBuffer(res.data) ? res.data : Buffer.from(res.data);
+}
 const router=YemotRouter({printLog:true,defaults:{removeInvalidChars:true},uncaughtErrorHandler:e=>logDetailedError('call handler',e)});
 
 function audioParts(audioBase64){return [{inlineData:{mimeType:process.env.YEMOT_AUDIO_MIME_TYPE||'audio/wav',data:audioBase64}}];}
@@ -152,7 +166,7 @@ async function callHandler(call) {
     if(!recordPath||recordPath==='None') return call.id_list_message([{type:'text',data:'לא נקלט דבר להתראות'}]);
     const active=activeCalls.get(activeKey);if(active) active.status='הקלטה התקבלה — מעבד';
     let audioBuffer;
-    try { const response=await withTimeout(yemotApi.download_file('ivr2:'+recordPath),REQUEST_TIMEOUT_MS,'yemotApi.download_file');audioBuffer=response.data; }
+    try { audioBuffer=await downloadYemotRecording(recordPath); }
     catch(e){logDetailedError('recording download',e);continue;}
     const audioBase64=Buffer.isBuffer(audioBuffer)?audioBuffer.toString('base64'):Buffer.from(audioBuffer).toString('base64');
     let replyText,transcript='';
@@ -192,14 +206,28 @@ async function configureYemotStructure() {
   }
   const publicUrl=(process.env.PUBLIC_BASE_URL||'').replace(/\/$/,'');
   if(!publicUrl){console.log('PUBLIC_BASE_URL missing; skipping automatic IVR URL setup');return;}
-  console.log('Configuring Yemot root API extension...');
-  const rootApi={type:'api',api_link:publicUrl+'/yemot',api_url_post:'no',api_hangup_send:'no',api_call_id_send:'no',api_phone_send:'yes',api_did_send:'no',api_extension_send:'no'};
-  await updateExtension('ivr2:/',rootApi);
-  console.log('Configuring Yemot extension 1 API fallback...');
-  await updateExtension('ivr2:/1',rootApi);
-  const voiceMap=(process.env.YEMOT_VOICE_OPTIONS||'1:Elik_2100,2:Jacob,3:ymMale').split(',');
-  for(const item of voiceMap){const [extension,voice]=item.split(':');if(!extension||!voice)continue;
-    await updateExtension(`ivr2:/2/${extension}`,{type:'add_id_to_list',add_id_to_list_location_list:'/ivr',add_id_to_list_key:'voice',add_id_to_list_value:voice,add_id_to_list_value_change:'yes',add_id_to_list_end_goto:'/1',add_id_to_list_error_end_goto:'/2'});}
+  console.log('Configuring Yemot entrypoint to match the proven V2 IVR setup...');
+  const apiConfig={
+    type:'api',
+    api_link:publicUrl+'/yemot',
+    api_url_post:'no',
+    api_hangup_send:'no',
+    api_call_id_send:'no',
+    api_phone_send:'yes',
+    api_did_send:'no',
+    api_extension_send:'no',
+    api_wait:'yes',
+    api_wait_play:'yes',
+    api_wait_answer_music_on_hold:'yes',
+    api_wait_answer_music_on_hold_different:'M0000',
+    api_timeout:'60',
+    tts_rate:'2',
+    rate:'2'
+  };
+  // The V2 package that was tested with the Yemot flow configures extension 1.
+  // Keep the root untouched so an account-level root setting cannot override /1.
+  await updateExtension('ivr2:/1',apiConfig);
+  console.log('Yemot extension 1 configured for API wait mode and 60s timeout.');
 }
 process.on('unhandledRejection',reason=>{if(!(reason instanceof ExitError))logDetailedError('Unhandled Rejection',reason)});
 process.on('uncaughtException',err=>{if(!(err instanceof ExitError))logDetailedError('Uncaught Exception',err)});
