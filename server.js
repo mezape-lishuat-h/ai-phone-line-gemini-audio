@@ -172,6 +172,7 @@ async function callHandler(call) {
   }
 }
 router.get('/yemot',callHandler);
+router.post('/yemot',callHandler);
 app.use(router);
 app.get('/api/conversations',(req,res)=>res.json({conversations:conversationLog,activeCalls:Array.from(activeCalls.values()),totalMessages:conversationLog.length,totalCallers:new Set(conversationLog.map(x=>x.phone)).size,serverTime:new Date().toISOString()}));
 app.get('/health',(req,res)=>res.json({ok:true}));
@@ -191,7 +192,7 @@ async function configureYemotStructure() {
   }
   const publicUrl=(process.env.PUBLIC_BASE_URL||'').replace(/\/$/,'');
   if(!publicUrl){console.log('PUBLIC_BASE_URL missing; skipping automatic IVR URL setup');return;}
-  console.log('Configuring Yemot API extension 1...'); await updateExtension('ivr2:/1',{type:'api',api_link:publicUrl+'/yemot'});
+  console.log('Configuring Yemot root API extension...'); await updateExtension('ivr2:',{type:'api',api_link:publicUrl+'/yemot',api_hangup_send:'no',api_call_id_send:'no',api_phone_send:'yes',api_did_send:'no',api_extension_send:'no'});
   const voiceMap=(process.env.YEMOT_VOICE_OPTIONS||'1:Elik_2100,2:Jacob,3:ymMale').split(',');
   for(const item of voiceMap){const [extension,voice]=item.split(':');if(!extension||!voice)continue;
     await updateExtension(`ivr2:/2/${extension}`,{type:'add_id_to_list',add_id_to_list_location_list:'/ivr',add_id_to_list_key:'voice',add_id_to_list_value:voice,add_id_to_list_value_change:'yes',add_id_to_list_end_goto:'/1',add_id_to_list_error_end_goto:'/2'});}
