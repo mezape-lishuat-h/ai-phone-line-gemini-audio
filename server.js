@@ -210,12 +210,6 @@ async function configureYemotStructure() {
   const apiConfig={
     type:'api',
     api_link:publicUrl+'/yemot',
-    api_url_post:'no',
-    api_hangup_send:'no',
-    api_call_id_send:'no',
-    api_phone_send:'yes',
-    api_did_send:'no',
-    api_extension_send:'no',
     api_wait:'yes',
     api_wait_play:'yes',
     api_wait_answer_music_on_hold:'yes',
@@ -228,6 +222,33 @@ async function configureYemotStructure() {
   // Keep the root untouched so an account-level root setting cannot override /1.
   await updateExtension('ivr2:/1',apiConfig);
   console.log('Yemot extension 1 configured for API wait mode and 60s timeout.');
+
+  // Match the proven V2 package: ensure wait-audio files exist in extension 1.
+  function silentWav(seconds) {
+    const sampleRate=8000, samples=Math.max(1,Math.round(sampleRate*seconds));
+    const dataSize=samples*2, b=Buffer.alloc(44+dataSize);
+    b.write('RIFF',0); b.writeUInt32LE(36+dataSize,4); b.write('WAVE',8); b.write('fmt ',12);
+    b.writeUInt32LE(16,16); b.writeUInt16LE(1,20); b.writeUInt16LE(1,22); b.writeUInt32LE(sampleRate,24);
+    b.writeUInt32LE(sampleRate*2,28); b.writeUInt16LE(2,32); b.writeUInt16LE(16,34);
+    b.write('data',36); b.writeUInt32LE(dataSize,40); return b;
+  }
+  async function uploadWaitFile(name,buffer) {
+    const form=new FormData();
+    form.append('file',new Blob([buffer],{type:'audio/wav'}),name);
+    const url=base+'/UploadFile?token='+encodeURIComponent(apiKey)+'&path='+encodeURIComponent('ivr2:1/'+name)+'&convertAudio=0';
+    const r=await fetch(url,{method:'POST',body:form,signal:AbortSignal.timeout(15000)});
+    const text=await r.text();
+    console.log('Yemot UploadFile '+name+':',text.slice(0,300));
+    if(!r.ok) throw new Error('UploadFile HTTP '+r.status+': '+text);
+    return text;
+  }
+  try {
+    await uploadWaitFile('M0000.wav',silentWav(1));
+    await uploadWaitFile('M1000.wav',silentWav(0.2));
+    console.log('Yemot wait-audio files configured automatically.');
+  } catch(e) {
+    console.error('Yemot wait-audio upload failed:',e.message);
+  }
 }
 process.on('unhandledRejection',reason=>{if(!(reason instanceof ExitError))logDetailedError('Unhandled Rejection',reason)});
 process.on('uncaughtException',err=>{if(!(err instanceof ExitError))logDetailedError('Uncaught Exception',err)});
