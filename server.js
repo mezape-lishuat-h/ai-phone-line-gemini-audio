@@ -193,8 +193,8 @@ async function configureYemotStructure() {
   const publicUrl=(process.env.PUBLIC_BASE_URL||'').replace(/\/$/,'');
   if(!publicUrl){console.log('PUBLIC_BASE_URL missing; skipping automatic IVR URL setup');return;}
   console.log('Configuring Yemot root API extension...');
-  const rootApi={type:'api',api_link:publicUrl+'/yemot',api_hangup_send:'no',api_call_id_send:'no',api_phone_send:'yes',api_did_send:'no',api_extension_send:'no'};
-  await updateExtension('ivr2:',rootApi);
+  const rootApi={type:'api',api_link:publicUrl+'/yemot',api_url_post:'no',api_hangup_send:'no',api_call_id_send:'no',api_phone_send:'yes',api_did_send:'no',api_extension_send:'no'};
+  await updateExtension('ivr2:/',rootApi);
   console.log('Configuring Yemot extension 1 API fallback...');
   await updateExtension('ivr2:/1',rootApi);
   const voiceMap=(process.env.YEMOT_VOICE_OPTIONS||'1:Elik_2100,2:Jacob,3:ymMale').split(',');
