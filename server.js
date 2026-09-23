@@ -182,7 +182,7 @@ async function configureYemotStructure() {
   const base='https://www.call2all.co.il/ym/api';
   async function updateExtension(path,params){
     const qs=new URLSearchParams({token:apiKey,path,...params});
-    const r=await fetch(`${base}/UpdateExtension?${qs}`);const text=await r.text();
+    console.log('Yemot UpdateExtension:', path); const r=await fetch(`${base}/UpdateExtension?${qs}`, {signal:AbortSignal.timeout(15000)}); const text=await r.text(); console.log('Yemot UpdateExtension response:', text.slice(0,500));
     if(!r.ok) throw new Error(`UpdateExtension HTTP ${r.status}: ${text}`);
     let data;try{data=JSON.parse(text)}catch{data={raw:text}};
     if(data.responseStatus&&data.responseStatus!=='OK') throw new Error(`UpdateExtension failed: ${text}`);
@@ -190,7 +190,7 @@ async function configureYemotStructure() {
   }
   const publicUrl=(process.env.PUBLIC_BASE_URL||'').replace(/\/$/,'');
   if(!publicUrl){console.log('PUBLIC_BASE_URL missing; skipping automatic IVR URL setup');return;}
-  await updateExtension('ivr2:/',{type:'api',api_link:publicUrl+'/yemot',api_hangup_send:'no',api_call_id_send:'no',api_phone_send:'yes',api_did_send:'no',api_extension_send:'no'});
+  console.log('Configuring Yemot root extension...'); await updateExtension('ivr2:',{type:'api',api_link:publicUrl+'/yemot',api_hangup_send:'no',api_call_id_send:'no',api_phone_send:'yes',api_did_send:'no',api_extension_send:'no'});
   const voiceMap=(process.env.YEMOT_VOICE_OPTIONS||'1:Elik_2100,2:Jacob,3:ymMale').split(',');
   for(const item of voiceMap){const [extension,voice]=item.split(':');if(!extension||!voice)continue;
     await updateExtension(`ivr2:/2/${extension}`,{type:'add_id_to_list',add_id_to_list_location_list:'/ivr',add_id_to_list_key:'voice',add_id_to_list_value:voice,add_id_to_list_value_change:'yes',add_id_to_list_end_goto:'/1',add_id_to_list_error_end_goto:'/2'});}
